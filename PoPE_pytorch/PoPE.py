@@ -3,7 +3,7 @@ from collections import namedtuple
 from math import pi
 
 import torch
-from torch import arange, stack, is_tensor, Tensor
+from torch import arange, cat, stack, is_tensor, Tensor
 from torch.nn import Module, Parameter
 from torch.amp import autocast
 
@@ -33,10 +33,17 @@ def apply_pope_to_qk(
     q, k,
     to_magnitude = F.softplus
 ):
-    q_len, k_len = q.shape[-2], k.shape[-2]
-    assert q_len <= k_len
-
     freqs, bias = pope
+
+    q_len, k_len, qk_dim, rotate_dim = q.shape[-2], k.shape[-2], q.shape[-1], freqs.shape[-1]
+
+    assert q_len <= k_len and rotate_dim <= qk_dim
+
+    is_partial_rotate = rotate_dim < qk_dim
+
+    if is_partial_rotate:
+        q, q_rest = q[..., :rotate_dim], q[..., -rotate_dim:]
+        k, k_rest = k[..., :rotate_dim], k[..., -rotate_dim:]
 
     if freqs.ndim == 3:
         freqs = rearrange(freqs, 'b n d -> b 1 n d')
@@ -60,6 +67,12 @@ def apply_pope_to_qk(
     kcos, ksin = freq_with_bias.cos(), freq_with_bias.sin()
 
     k = rearrange([k * kcos, k * ksin], 'two ... d -> ... (d two)')
+
+    # concat
+
+    if is_partial_rotate:
+        q = cat((q, q_rest), dim = -1)
+        k = cat((k, k_rest), dim = -1)
 
     return q, k
 
