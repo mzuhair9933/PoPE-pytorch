@@ -1,3 +1,5 @@
+<img src="./pope.png" width="400px"></img>
+
 # PoPE-pytorch
 
 Efficient implementation (and explorations) into [polar coordinate positional embedding (PoPE)](https://arxiv.org/abs/2509.10534) - from [Gopalakrishnan](https://agopal42.github.io/) et al. under Schmidhuber
