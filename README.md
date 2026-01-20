@@ -1,2 +1,17 @@
 # PoPE-pytorch
-Efficient implementation (and explorations) into polar coordinate positional embedding (PoPE) - from Gopalakrishnan et al. under Schmidhuber
+
+Efficient implementation (and explorations) into [polar coordinate positional embedding (PoPE)](https://arxiv.org/abs/2509.10534) - from [Gopalakrishnan](https://agopal42.github.io/) et al. under Schmidhuber
+
+## Citations
+
+```bibtex
+@misc{gopalakrishnan2025decouplingwhatwherepolar,
+    title   = {Decoupling the "What" and "Where" With Polar Coordinate Positional Embeddings}, 
+    author  = {Anand Gopalakrishnan and Robert Csordás and Jürgen Schmidhuber and Michael C. Mozer},
+    year    = {2025},
+    eprint  = {2509.10534},
+    archivePrefix = {arXiv},
+    primaryClass = {cs.LG},
+    url     = {https://arxiv.org/abs/2509.10534}, 
+}
+```
