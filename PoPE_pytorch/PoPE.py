@@ -1,7 +1,21 @@
+from __future__ import annotations
+from collections import namedtuple
+from math import pi
+
 import torch
-from torch.nn import Module
+from torch import arange, stack, is_tensor, Tensor
+from torch.nn import Module, Parameter
+from torch.amp import autocast
 
 import torch.nn.functional as F
+
+from einops import einsum, rearrange
+
+from torch_einops_utils import slice_right_at_dim
+
+# constants
+
+PolarEmbedReturn = namedtuple('PolarEmbedReturn', ('freqs', 'bias'))
 
 # helper functions
 
@@ -11,17 +25,97 @@ def exists(v):
 def default(v, d):
     return v if exists(v) else d
 
-# classes
+# applying pope to qk
 
-def apply_pope_to_qk(pope, q, k):
+@autocast('cuda', enabled = False)
+def apply_pope_to_qk(
+    pope: PolarEmbedReturn,
+    q, k,
+    to_magnitude = F.softplus
+):
+    q_len, k_len = q.shape[-2], k.shape[-2]
+    assert q_len <= k_len
+
+    freqs, bias = pope
+
+    if freqs.ndim == 3:
+        freqs = rearrange(freqs, 'b n d -> b 1 n d')
+
+    freq_with_bias = freqs + rearrange(bias, 'h d -> h 1 d')
+
+    # convert q and k to polar magnitudes with activation
+
+    q, k = to_magnitude(q), to_magnitude(k)
+
+    # apply rotations
+
+    freqs = slice_right_at_dim(freqs, q_len, dim = -2)
+
+    qcos, qsin = freqs.cos(), freqs.sin()
+
+    q = rearrange([q * qcos, q * qsin], 'two ... d -> ... (d two)')
+
+    # handle inference
+
+    kcos, ksin = freq_with_bias.cos(), freq_with_bias.sin()
+
+    k = rearrange([k * kcos, k * ksin], 'two ... d -> ... (d two)')
+
     return q, k
+
+# main class
 
 class PoPE(Module):
     def __init__(
         self,
-        dim
+        dim,
+        *,
+        heads,
+        theta = 10000,
+        bias_uniform_init = False
     ):
         super().__init__()
 
-    def forward(self, q, k):
-        return q, k
+        # freqs
+
+        inv_freqs = theta ** -(arange(dim).float() / dim)
+        self.register_buffer('inv_freqs', inv_freqs)
+
+        # the learned bias on the keys
+
+        self.bias = Parameter(torch.zeros(heads, dim))
+
+        if bias_uniform_init:
+            self.bias.uniform_(-2. * pi, 0.)
+
+        # convenience
+
+        self.apply_pope_to_qk = staticmethod(apply_pope_to_qk)
+
+    @property
+    def device(self):
+        return self.inv_freqs.device
+
+    @autocast('cuda', enabled = False)
+    def forward(
+        self,
+        pos_or_seq_len: Tensor | int
+    ):
+
+        # get positions depending on input
+
+        if is_tensor(pos_or_seq_len):
+            pos = pos_or_seq_len
+        else:
+            seq_len = pos_or_seq_len
+            pos = arange(seq_len, device = self.device, dtype = self.inv_freqs.dtype)
+
+        # freqs
+
+        freqs = einsum(pos, self.inv_freqs, '... i, j -> ... i j')
+
+        # the bias, with clamping
+
+        bias = self.bias.clamp(-2. * pi, 0.)
+
+        return PolarEmbedReturn(freqs, bias)
