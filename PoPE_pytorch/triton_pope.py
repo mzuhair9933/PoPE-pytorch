@@ -3,10 +3,15 @@ import torch.nn.functional as F
 import triton
 import triton.language as tl
 
+from einops import repeat
+
 # helper functions
 
 def exists(v):
     return v is not None
+
+def divisible_by(num, den):
+    return (num % den) == 0
 
 # activation and its derivative with numerical stability
 
@@ -342,4 +347,10 @@ class PoPESimilarityFunction(torch.autograd.Function):
         return dq, dk, dfreqs_out, dbias_out, None, None
 
 def triton_compute_qk_similarity(q, k, freqs, bias, rotate_dim, allow_tf32 = True):
+
+    assert divisible_by(q.shape[-1], k.shape[1])
+    groups = q.shape[1] // k.shape[1]
+    k = repeat(k, 'b h ... -> b (g h) ...', g = groups)
+    bias = repeat(bias, 'h ... -> (g h) ...', g = groups)
+
     return PoPESimilarityFunction.apply(q, k, freqs, bias, rotate_dim, allow_tf32)
