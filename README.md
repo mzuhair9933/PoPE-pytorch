@@ -38,6 +38,25 @@ rotated_q, rotated_k = pope.apply_pope_to_qk(pos_embed, q, k)
 rotated_q, rotated_k = pope.apply_pope_to_qk(pos_embed, q[..., -1:, :], k)
 ```
 
+### Fused Attention Similarity
+
+```python
+import torch
+from PoPE_pytorch import PoPE, compute_attn_similarity
+
+pope = PoPE(dim = 64, heads = 8).cuda()
+pos_emb = pope(1024)
+
+q = torch.randn(1, 8, 1024, 64).cuda()
+k = torch.randn(1, 8, 1024, 64).cuda()
+
+# fused triton similarity
+
+sim = compute_attn_similarity(q, k, pos_emb) # (1, 8, 1024, 1024)
+
+attn = sim.softmax(dim = -1) # ...
+```
+
 ## Citations
 
 ```bibtex
