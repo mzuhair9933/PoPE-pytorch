@@ -94,13 +94,16 @@ class PoPE(Module):
         *,
         heads,
         theta = 10000,
-        bias_uniform_init = False
+        bias_uniform_init = False,
+        inv_freqs: Tensor | list[float] | None = None
     ):
         super().__init__()
 
         # freqs
 
-        inv_freqs = theta ** -(arange(dim).float() / dim)
+        if not exists(inv_freqs):
+            inv_freqs = theta ** -(arange(dim).float() / dim)
+
         self.register_buffer('inv_freqs', inv_freqs)
 
         # the learned bias on the keys

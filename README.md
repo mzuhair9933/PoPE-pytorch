@@ -44,17 +44,24 @@ rotated_q, rotated_k = pope.apply_pope_to_qk(pos_embed, q[..., -1:, :], k)
 import torch
 from PoPE_pytorch import PoPE, compute_attn_similarity
 
+# define pope
+
 pope = PoPE(dim = 64, heads = 8).cuda()
+
+# get rotations
+
 pos_emb = pope(1024)
+
+# queries and keys
 
 q = torch.randn(1, 8, 1024, 64).cuda()
 k = torch.randn(1, 8, 1024, 64).cuda()
 
-# fused triton similarity
+# fused attention similarity, avoiding expanding 64 to 128
 
 sim = compute_attn_similarity(q, k, pos_emb) # (1, 8, 1024, 1024)
 
-attn = sim.softmax(dim = -1) # ...
+attn = sim.softmax(dim = -1) # the usual in attention..
 ```
 
 ## Citations
