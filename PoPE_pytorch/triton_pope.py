@@ -53,6 +53,8 @@ def _fwd_kernel(
 
     acc = tl.zeros((BLOCK_I, BLOCK_J), dtype = tl.float32)
 
+    q_offset = seq_k - seq_q
+
     for d_offset in range(0, head_dim, BLOCK_D):
         d_mask = (d_offset + off_d) < head_dim
         rotate_mask = (d_offset + off_d) < rotate_dim
@@ -60,7 +62,7 @@ def _fwd_kernel(
         q = tl.load(Q + batch_idx * stride_qb + head_idx * stride_qh + off_i[:, None] * stride_qi + (d_offset + off_d[None, :]) * stride_qd, mask = mask_i[:, None] & d_mask[None, :], other = 0.0)
         k = tl.load(K + batch_idx * stride_kb + head_idx * stride_kh + off_j[:, None] * stride_kj + (d_offset + off_d[None, :]) * stride_kd, mask = mask_j[:, None] & d_mask[None, :], other = 0.0)
 
-        fq = tl.load(Freqs + batch_idx * stride_fb + (head_idx % n_heads) * stride_fh + off_i[:, None] * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_i[:, None] & rotate_mask[None, :], other = 0.0)
+        fq = tl.load(Freqs + batch_idx * stride_fb + (head_idx % n_heads) * stride_fh + (q_offset + off_i[:, None]) * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_i[:, None] & rotate_mask[None, :], other = 0.0)
         fk = tl.load(Freqs + batch_idx * stride_fb + (head_idx % n_heads) * stride_fh + off_j[:, None] * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_j[:, None] & rotate_mask[None, :], other = 0.0)
         
         bias = tl.load(Bias + head_idx * stride_bh + (d_offset + off_d), mask = rotate_mask, other = 0.0)
@@ -104,6 +106,8 @@ def _bwd_kernel_dqk_df(
     head_idx = batch_head_idx % n_heads
     off_d = tl.arange(0, BLOCK_D)
 
+    q_offset = seq_k - seq_q
+
     if MODE == 0:
         off_outer = grid_idx * BLOCK_I + tl.arange(0, BLOCK_I)
         mask_outer = off_outer < seq_q
@@ -114,7 +118,7 @@ def _bwd_kernel_dqk_df(
             acc_df = tl.zeros((BLOCK_I, BLOCK_D), dtype = tl.float32)
             
             q = tl.load(Q + batch_idx * stride_qb + head_idx * stride_qh + off_outer[:, None] * stride_qi + (d_offset + off_d[None, :]) * stride_qd, mask = mask_outer[:, None] & d_mask[None, :], other = 0.0)
-            fq = tl.load(Freqs + batch_idx * stride_fb + head_idx * stride_fh + off_outer[:, None] * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_outer[:, None] & rotate_mask[None, :], other = 0.0)
+            fq = tl.load(Freqs + batch_idx * stride_fb + head_idx * stride_fh + (q_offset + off_outer[:, None]) * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_outer[:, None] & rotate_mask[None, :], other = 0.0)
             daq_dq = tl.where(rotate_mask[None, :], softplus_bwd(q), 1.0)
             qc_f = tl.where(rotate_mask[None, :], tl.cos(fq), 1.0)
             qs_f = tl.where(rotate_mask[None, :], tl.sin(fq), 0.0)
@@ -141,7 +145,7 @@ def _bwd_kernel_dqk_df(
             
             tl.store(dQ + batch_idx * stride_dqb + head_idx * stride_dqh + off_outer[:, None] * stride_dqi + (d_offset + off_d[None, :]) * stride_dqd, acc_dq, mask = mask_outer[:, None] & d_mask[None, :])
             if HAS_DF:
-                tl.atomic_add(dFreqs + batch_idx * stride_dfb + head_idx * stride_dfh + off_outer[:, None] * stride_dfi + (d_offset + off_d[None, :]) * stride_dfd, acc_df, mask = mask_outer[:, None] & rotate_mask[None, :])
+                tl.atomic_add(dFreqs + batch_idx * stride_dfb + head_idx * stride_dfh + (q_offset + off_outer[:, None]) * stride_dfi + (d_offset + off_d[None, :]) * stride_dfd, acc_df, mask = mask_outer[:, None] & rotate_mask[None, :])
             
     else: # MODE == 1
         off_outer = grid_idx * BLOCK_J + tl.arange(0, BLOCK_J)
@@ -167,7 +171,7 @@ def _bwd_kernel_dqk_df(
                 mask_inner = off_inner < seq_q
                 ds = tl.load(dS + batch_idx * stride_sb + head_idx * stride_sh + off_inner[:, None] * stride_si + off_outer[None, :] * stride_sj, mask = mask_inner[:, None] & mask_outer[None, :], other = 0.0)
                 iq = tl.load(Q + batch_idx * stride_qb + head_idx * stride_qh + off_inner[:, None] * stride_qi + (d_offset + off_d[None, :]) * stride_qd, mask = mask_inner[:, None] & d_mask[None, :], other = 0.0)
-                ifq = tl.load(Freqs + batch_idx * stride_fb + (head_idx % n_heads) * stride_fh + off_inner[:, None] * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_inner[:, None] & rotate_mask[None, :], other = 0.0)
+                ifq = tl.load(Freqs + batch_idx * stride_fb + (head_idx % n_heads) * stride_fh + (q_offset + off_inner[:, None]) * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_inner[:, None] & rotate_mask[None, :], other = 0.0)
                 
                 iaq = tl.where(rotate_mask[None, :], softplus_fwd(iq), iq)
                 iqc_f = tl.where(rotate_mask[None, :], tl.cos(ifq), 1.0)
@@ -203,12 +207,14 @@ def _bwd_kernel_dbias_optimized(
     mask_i = off_i < seq_q
     off_d = tl.arange(0, BLOCK_D)
 
+    q_offset = seq_k - seq_q
+
     for d_offset in range(0, head_dim, BLOCK_D):
         d_mask = (d_offset + off_d) < head_dim
         rotate_mask = (d_offset + off_d) < rotate_dim
         
         q = tl.load(Q + batch_idx * stride_qb + head_idx * stride_qh + off_i[:, None] * stride_qi + (d_offset + off_d[None, :]) * stride_qd, mask = mask_i[:, None] & d_mask[None, :], other = 0.0)
-        fq = tl.load(Freqs + batch_idx * stride_fb + (head_idx % n_heads) * stride_fh + off_i[:, None] * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_i[:, None] & rotate_mask[None, :], other = 0.0)
+        fq = tl.load(Freqs + batch_idx * stride_fb + (head_idx % n_heads) * stride_fh + (q_offset + off_i[:, None]) * stride_fi + (d_offset + off_d[None, :]) * stride_fd, mask = mask_i[:, None] & rotate_mask[None, :], other = 0.0)
         aq = tl.where(rotate_mask[None, :], softplus_fwd(q), q)
         qc_f = tl.where(rotate_mask[None, :], tl.cos(fq), 1.0)
         qs_f = tl.where(rotate_mask[None, :], tl.sin(fq), 0.0)
