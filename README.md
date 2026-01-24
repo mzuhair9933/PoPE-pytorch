@@ -76,15 +76,17 @@ pope = PoPE(dim = 32, heads = 8).cuda()
 
 # queries, keys, values for attention
 
-q = torch.randn(1, 8, 1024, 64).cuda()
-k = torch.randn(1, 8, 1024, 64).cuda()
-v = torch.randn(1, 8, 1024, 64).cuda()
+q = torch.randn(2, 8, 1024, 64).cuda()
+k = torch.randn(2, 8, 1024, 64).cuda()
+v = torch.randn(2, 8, 1024, 64).cuda()
 
-pope_emb = pope(1024)
+pos_emb = pope(1024)
 
-out = flash_attn_with_pope(q, k, v, pope = pope_emb, causal = True)
+mask = torch.ones((2, 1024)).bool().cuda()
 
-assert out.shape == (1, 8, 1024, 64)
+out = flash_attn_with_pope(q, k, v, pope = pos_emb, causal = True, mask = mask)
+
+assert out.shape == (2, 8, 1024, 64)
 ```
 
 ## Citations

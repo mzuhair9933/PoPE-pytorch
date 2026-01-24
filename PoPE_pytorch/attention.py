@@ -77,6 +77,7 @@ def flash_attn_with_pope(
     k,
     v,
     pope = None,
+    mask = None,
     causal = False,
     softmax_scale = None,
     fused = None,
@@ -95,7 +96,7 @@ def flash_attn_with_pope(
             v = rearrange(v, 'b h n d -> b n h d')
 
         freqs, bias = pope
-        out = flash_attn(q, k, v, freqs = freqs, pope_bias = bias, causal = causal, softmax_scale = softmax_scale)
+        out = flash_attn(q, k, v, freqs = freqs, pope_bias = bias, mask = mask, causal = causal, softmax_scale = softmax_scale)
 
         if head_dimension_at_first:
             out = rearrange(out, 'b n h d -> b h n d')
@@ -125,8 +126,13 @@ def flash_attn_with_pope(
     if q.dtype != v.dtype:
         v = v.to(q.dtype)
 
+    attn_mask = None
+    if exists(mask):
+        attn_mask = rearrange(mask, 'b j -> b 1 1 j')
+
     out = F.scaled_dot_product_attention(
         q, k, v,
+        attn_mask = attn_mask,
         is_causal = causal,
         scale = softmax_scale
     )

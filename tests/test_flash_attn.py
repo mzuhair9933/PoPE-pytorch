@@ -11,7 +11,8 @@ def exists(v):
 @pytest.mark.parametrize('dtype', [torch.float16, torch.bfloat16, torch.float32])
 @pytest.mark.parametrize('causal', [True, False])
 @pytest.mark.parametrize('seq_len_q', [1, 256])
-def test_fused_vs_manual(dtype, causal, seq_len_q):
+@pytest.mark.parametrize('has_mask', [True, False])
+def test_fused_vs_manual(dtype, causal, seq_len_q, has_mask):
     device = 'cuda'
     
     batch, heads, dim = 2, 4, 64
@@ -28,19 +29,24 @@ def test_fused_vs_manual(dtype, causal, seq_len_q):
     pope = pope_module(seq_len_k)
     
     do = torch.randn(batch, seq_len_q, heads, dim, device = device, dtype = dtype)
-    
+
+    key_pad_mask = None
+    if has_mask:
+        key_pad_mask = torch.ones((batch, seq_len_k), device = device, dtype = torch.bool)
+        key_pad_mask[:, seq_len_k // 2:] = False
+
     # 1. Manual Path
     qc1, kc1, vc1 = q.clone().detach().requires_grad_(True), k.clone().detach().requires_grad_(True), v.clone().detach().requires_grad_(True)
     pc1 = [t.clone().detach().requires_grad_(True) for t in pope]
     
-    out_manual = flash_attn_with_pope(qc1, kc1, vc1, pope = pc1, causal = causal, fused = False, head_dimension_at_first = False)
+    out_manual = flash_attn_with_pope(qc1, kc1, vc1, pope = pc1, mask = key_pad_mask, causal = causal, fused = False, head_dimension_at_first = False)
     out_manual.backward(do)
     
     # 2. Fused Path
     qc2, kc2, vc2 = q.clone().detach().requires_grad_(True), k.clone().detach().requires_grad_(True), v.clone().detach().requires_grad_(True)
     pc2 = [t.clone().detach().requires_grad_(True) for t in pope]
     
-    out_fused = flash_attn_with_pope(qc2, kc2, vc2, pope = pc2, causal = causal, fused = True, head_dimension_at_first = False)
+    out_fused = flash_attn_with_pope(qc2, kc2, vc2, pope = pc2, mask = key_pad_mask, causal = causal, fused = True, head_dimension_at_first = False)
     out_fused.backward(do)
     
     # check parity

@@ -27,11 +27,11 @@ def default(val, d):
 })
 @triton.jit
 def _fwd_kernel(
-    Q, K, V, Freqs, PopeBias, Out, Lse,
+    Q, K, V, Freqs, PopeBias, Out, Lse, Mask,
     softmax_scale, SQB, SQH, SQM, SKB, SKH, SKN, SVB, SVH, SVN, 
-    SFB, SFH, SFI, SPBH, SOB, SOH, SOM,
+    SFB, SFH, SFI, SPBH, SOB, SOH, SOM, SKMB, SKMN,
     n_heads, seqlen_q, seqlen_k, headdim, rotate_dim,
-    HAS_POPE: tl.constexpr, IS_CAUSAL: tl.constexpr,
+    HAS_POPE: tl.constexpr, IS_CAUSAL: tl.constexpr, HAS_MASK: tl.constexpr,
     BLOCK_HEADDIM: tl.constexpr, EVEN_M: tl.constexpr, EVEN_N: tl.constexpr, EVEN_HEADDIM: tl.constexpr,
     BM: tl.constexpr, BN: tl.constexpr,
 ):
@@ -86,6 +86,10 @@ def _fwd_kernel(
         if IS_CAUSAL:
             qk += tl.where(om[:, None] >= cn[None, :], 0, float("-inf"))
 
+        if HAS_MASK:
+            mask = tl.load(Mask + b * SKMB + cn * SKMN, mask=mn, other=False)
+            qk += tl.where(mask[None, :], 0, float("-inf"))
+
         if not EVEN_N:
             qk += tl.where(mn[None, :], 0, float("-inf"))
 
@@ -132,10 +136,10 @@ def _bwd_preprocess(Out, DO, Delta, SOB, SOH, SOM, SDB, SDH, SDM, n_heads, seqle
 })
 @triton.jit
 def _bwd_kernel(
-    Q, K, V, Freqs, PopeBias, DO, DQ, DK, DV, DFreqs, DPopeBias, Lse, Delta,
+    Q, K, V, Freqs, PopeBias, DO, DQ, DK, DV, DFreqs, DPopeBias, Lse, Delta, Mask,
     softmax_scale, SQB, SQH, SQM, SKB, SKH, SKN, SVB, SVH, SVN, SFB, SFH, SFI, SPBH,
-    SDB, SDH, SDM, SDQB, SDQH, SDQM, SDKB, SDKH, SDKN, SDVB, SDVH, SDVN, SDFB, SDFH, SDFI,
-    n_heads, seqlen_q, seqlen_k, headdim, rotate_dim, HAS_POPE: tl.constexpr, IS_CAUSAL: tl.constexpr, BLOCK_HEADDIM: tl.constexpr,
+    SDB, SDH, SDM, SDQB, SDQH, SDQM, SDKB, SDKH, SDKN, SDVB, SDVH, SDVN, SDFB, SDFH, SDFI, SKMB, SKMN,
+    n_heads, seqlen_q, seqlen_k, headdim, rotate_dim, HAS_POPE: tl.constexpr, IS_CAUSAL: tl.constexpr, HAS_MASK: tl.constexpr, BLOCK_HEADDIM: tl.constexpr,
     EVEN_M: tl.constexpr, EVEN_N: tl.constexpr, EVEN_HEADDIM: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr,
 ):
     hb = tl.program_id(1)
@@ -179,6 +183,10 @@ def _bwd_kernel(
         if IS_CAUSAL:
             qk += tl.where(m[:, None] >= on[None, :], 0, float("-inf"))
 
+        if HAS_MASK:
+            mask = tl.load(Mask + b * SKMB + on * SKMN, mask = mn, other = False)
+            qk += tl.where(mask[None, :], 0, float("-inf"))
+
         lse = tl.load(Lse + hb * seqlen_q + m, mask = mm, other = float("-inf"))
         p = tl.exp(qk - tl.where(lse == float("-inf"), 0.0, lse)[:, None])
         p = tl.where((lse[:, None] == float("-inf")) | (~mm[:, None]), 0.0, p)
@@ -215,6 +223,7 @@ def flash_attn_forward(
     q, k, v,
     freqs = None,
     pope_bias = None,
+    mask = None,
     causal = False,
     softmax_scale = None
 ):
@@ -244,10 +253,18 @@ def flash_attn_forward(
     BM, BN = (64, 32) if d <= 64 else (32, 32)
     num_warps = 2 if d <= 32 else 4
 
+    has_mask = exists(mask)
+    if has_mask:
+        skmb, skmn = mask.stride(0), mask.stride(1)
+    else:
+        skmb, skmn = 0, 0
+
     _fwd_kernel[(triton.cdiv(seq_q, BM), batch * heads)](
-        q, k, v, freqs, pope_bias, o, lse, softmax_scale,
+        q, k, v, freqs, pope_bias, o, lse, mask,
+        softmax_scale,
         q.stride(0), q.stride(2), q.stride(1), k.stride(0), k.stride(2), k.stride(1), v.stride(0), v.stride(2), v.stride(1),
-        *fs, ps, o.stride(0), o.stride(2), o.stride(1), heads, seq_q, seq_k, d, rot, has_p, causal, BD, 
+        *fs, ps, o.stride(0), o.stride(2), o.stride(1), skmb, skmn,
+        heads, seq_q, seq_k, d, rot, has_p, causal, has_mask, BD, 
         EVEN_M=True, EVEN_N=True, EVEN_HEADDIM=True, BM=BM, BN=BN, num_warps=num_warps, num_stages=1
     )
 
@@ -260,6 +277,7 @@ def flash_attn_backward(
     dpope_bias = None,
     freqs = None,
     pope_bias = None,
+    mask = None,
     causal = False,
     softmax_scale = None
 ):
@@ -302,11 +320,18 @@ def flash_attn_backward(
 
     ps = pope_bias.stride(0) if has_p else 0
 
+    has_mask = exists(mask)
+    if has_mask:
+        skmb, skmn = mask.stride(0), mask.stride(1)
+    else:
+        skmb, skmn = 0, 0
+
     _bwd_kernel[(triton.cdiv(seq_k, 32), batch * heads)](
-        q, k, v, freqs, pope_bias, do, dq, dk, dv, dfreqs, dpope_bias, lse, delta, softmax_scale,
+        q, k, v, freqs, pope_bias, do, dq, dk, dv, dfreqs, dpope_bias, lse, delta, mask, softmax_scale,
         q.stride(0), q.stride(2), q.stride(1), k.stride(0), k.stride(2), k.stride(1), v.stride(0), v.stride(2), v.stride(1),
         *fs, ps, do.stride(0), do.stride(2), do.stride(1), dq.stride(0), dq.stride(2), dq.stride(1),
-        dk.stride(0), dk.stride(2), dk.stride(1), dv.stride(0), dv.stride(2), dv.stride(1), *dfs, heads, seq_q, seq_k, d, rot, has_p, causal, BD, BM=32, BN=32, num_warps=2 if d <= 32 else 4, num_stages=1
+        dk.stride(0), dk.stride(2), dk.stride(1), dv.stride(0), dv.stride(2), dv.stride(1), *dfs, skmb, skmn,
+        heads, seq_q, seq_k, d, rot, has_p, causal, has_mask, BD, BM=32, BN=32, num_warps=2 if d <= 32 else 4, num_stages=1
     )
 
 class FlashAttnFunction(Function):
@@ -316,31 +341,33 @@ class FlashAttnFunction(Function):
         q, k, v,
         freqs = None,
         pope_bias = None,
+        mask = None,
         causal = False,
         softmax_scale = None
     ):
-        o, lse = flash_attn_forward(q, k, v, freqs, pope_bias, causal, softmax_scale)
-        ctx.save_for_backward(q, k, v, freqs, pope_bias, o, lse)
+        o, lse = flash_attn_forward(q, k, v, freqs, pope_bias, mask, causal, softmax_scale)
+        ctx.save_for_backward(q, k, v, freqs, pope_bias, mask, o, lse)
         ctx.causal, ctx.softmax_scale = causal, softmax_scale
         return o
 
     @staticmethod
     def backward(ctx, do):
         do = do.contiguous()
-        q, k, v, f, pb, o, lse = ctx.saved_tensors
+        q, k, v, f, pb, m, o, lse = ctx.saved_tensors
 
         dq, dk, dv = torch.zeros_like(q), torch.zeros_like(k), torch.zeros_like(v)
         df, dpb = torch.zeros_like(f) if exists(f) else None, torch.zeros_like(pb) if exists(pb) else None
 
-        flash_attn_backward(do, q, k, v, o, lse, dq, dk, dv, df, dpb, f, pb, ctx.causal, ctx.softmax_scale)
-        return dq, dk, dv, df, dpb, None, None
+        flash_attn_backward(do, q, k, v, o, lse, dq, dk, dv, df, dpb, f, pb, m, ctx.causal, ctx.softmax_scale)
+        return dq, dk, dv, df, dpb, None, None, None
 
 def flash_attn(
     q, k, v,
     freqs = None,
     pope_bias = None,
+    mask = None,
     causal = False,
     softmax_scale = None
 ):
     q, k, v = map(lambda t: t.contiguous(), (q, k, v))
-    return FlashAttnFunction.apply(q, k, v, freqs, pope_bias, causal, softmax_scale)
+    return FlashAttnFunction.apply(q, k, v, freqs, pope_bias, mask, causal, softmax_scale)
