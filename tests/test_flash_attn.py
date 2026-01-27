@@ -39,14 +39,14 @@ def test_fused_vs_manual(dtype, causal, seq_len_q, has_mask):
     qc1, kc1, vc1 = q.clone().detach().requires_grad_(True), k.clone().detach().requires_grad_(True), v.clone().detach().requires_grad_(True)
     pc1 = [t.clone().detach().requires_grad_(True) for t in pope]
     
-    out_manual = flash_attn_with_pope(qc1, kc1, vc1, pope = pc1, mask = key_pad_mask, causal = causal, fused = False, head_dimension_at_first = False)
+    out_manual = flash_attn_with_pope(qc1, kc1, vc1, pos_emb = pc1, mask = key_pad_mask, causal = causal, fused = False, head_dimension_at_first = False)
     out_manual.backward(do)
     
     # 2. Fused Path
     qc2, kc2, vc2 = q.clone().detach().requires_grad_(True), k.clone().detach().requires_grad_(True), v.clone().detach().requires_grad_(True)
     pc2 = [t.clone().detach().requires_grad_(True) for t in pope]
     
-    out_fused = flash_attn_with_pope(qc2, kc2, vc2, pope = pc2, mask = key_pad_mask, causal = causal, fused = True, head_dimension_at_first = False)
+    out_fused = flash_attn_with_pope(qc2, kc2, vc2, pos_emb = pc2, mask = key_pad_mask, causal = causal, fused = True, head_dimension_at_first = False)
     out_fused.backward(do)
     
     # check parity
@@ -102,7 +102,7 @@ def test_compute_attn_similarity(seq_len_q):
     out_similarity = rearrange(out_similarity, 'b h n d -> b n h d')
 
     # 2. Use complete flash_attn_with_pope
-    out_attention = flash_attn_with_pope(q, k, v, pope = pope, head_dimension_at_first = False)
+    out_attention = flash_attn_with_pope(q, k, v, pos_emb = pope, head_dimension_at_first = False)
 
     # 3. Validate parity
     diff = (out_similarity - out_attention).abs().max().item()

@@ -88,6 +88,8 @@ def apply_pope_to_qk(
 # main class
 
 class PoPE(Module):
+    apply_pope_to_qk = staticmethod(apply_pope_to_qk)
+
     def __init__(
         self,
         dim,
@@ -112,10 +114,6 @@ class PoPE(Module):
 
         if bias_uniform_init:
             self.bias.uniform_(-2. * pi, 0.)
-
-        # convenience
-
-        self.apply_pope_to_qk = staticmethod(apply_pope_to_qk)
 
     @property
     def device(self):

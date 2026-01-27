@@ -76,7 +76,7 @@ def flash_attn_with_pope(
     q,
     k,
     v,
-    pope = None,
+    pos_emb = None,
     mask = None,
     causal = False,
     softmax_scale = None,
@@ -95,7 +95,7 @@ def flash_attn_with_pope(
             k = rearrange(k, 'b h n d -> b n h d')
             v = rearrange(v, 'b h n d -> b n h d')
 
-        freqs, bias = pope
+        freqs, bias = pos_emb
         out = flash_attn(q, k, v, freqs = freqs, pope_bias = bias, mask = mask, causal = causal, softmax_scale = softmax_scale)
 
         if head_dimension_at_first:
@@ -111,7 +111,7 @@ def flash_attn_with_pope(
         k = rearrange(k, 'b n h d -> b h n d')
         v = rearrange(v, 'b n h d -> b h n d')
 
-    q, k = apply_pope_to_qk(pope, q, k, to_magnitude = F.softplus)
+    q, k = apply_pope_to_qk(pos_emb, q, k, to_magnitude = F.softplus)
     
     # group query attention support
 
