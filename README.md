@@ -48,7 +48,7 @@ You can either pass in the positions manually, or just pass the dimensions as a 
 import torch
 from PoPE_pytorch import AxialPoPE
 
-# axial pope for images (e.g. 32x32)
+# axial pope for images (e.g. 16x16)
 # split 64 dim into 32 (x) and 32 (y)
 
 pope = AxialPoPE(
@@ -57,7 +57,7 @@ pope = AxialPoPE(
     axial_dims = (32, 32)
 )
 
-pos_emb = pope((32, 32)) # (1024, 64) frequencies
+pos_emb = pope((16, 16)) # (256, 64) frequencies
 
 # for video (e.g. 8 frames, 16x16 frames)
 # split 96 dim into 32 (t), 32 (x), 32 (y)
